@@ -1,0 +1,121 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "London to Edinburgh",
+        "kind": "route"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.1276, 51.5074],
+          [-1.2577, 51.752],
+          [-1.8904, 52.4862],
+          [-2.2426, 53.4808],
+          [-1.5491, 53.8008],
+          [-1.0873, 53.9591],
+          [-1.6178, 54.9783],
+          [-3.1883, 55.9533]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "London",
+        "kind": "waypoint",
+        "order": 1
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-0.1276, 51.5074]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Oxford",
+        "kind": "waypoint",
+        "order": 2
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-1.2577, 51.752]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Birmingham",
+        "kind": "waypoint",
+        "order": 3
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-1.8904, 52.4862]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Manchester",
+        "kind": "waypoint",
+        "order": 4
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-2.2426, 53.4808]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Leeds",
+        "kind": "waypoint",
+        "order": 5
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-1.5491, 53.8008]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "York",
+        "kind": "waypoint",
+        "order": 6
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-1.0873, 53.9591]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Newcastle",
+        "kind": "waypoint",
+        "order": 7
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-1.6178, 54.9783]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Edinburgh",
+        "kind": "waypoint",
+        "order": 8
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-3.1883, 55.9533]
+      }
+    }
+  ]
+}
