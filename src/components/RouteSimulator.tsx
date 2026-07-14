@@ -68,7 +68,6 @@ export default function RouteSimulator({ map }: Props) {
 
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0); // 0 = London, 1 = Edinburgh
-  const [ready, setReady] = useState(false);
 
   // ----------------------------------------------------------
   // 1) Add simulator layers onto the map (once)
@@ -117,7 +116,6 @@ export default function RouteSimulator({ map }: Props) {
     travelledSourceRef.current = map.getSource(
       "travelled",
     ) as maplibregl.GeoJSONSource;
-    setReady(true);
 
     // Clean up layers if this component unmounts
     return () => {
@@ -172,7 +170,7 @@ export default function RouteSimulator({ map }: Props) {
   }
 
   function play() {
-    if (playing || !ready) return;
+    if (playing || !markerSourceRef.current || !travelledSourceRef.current) return;
 
     if (progress >= 1) {
       paintAtProgress(0);
