@@ -1,50 +1,59 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+/**
+ * Map.tsx — only the map + static route.
+ * The moving marker / coloured trail live in RouteSimulator.tsx.
+ */
+
+import { useEffect, useRef, useState } from "react";
 import type { FeatureCollection } from "geojson";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import ukRoute from "@/data/uk-route.json";
+import RouteSimulator from "@/components/RouteSimulator";
 
 export default function Map() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
 
+  // Once the map has loaded, we hand it to RouteSimulator
+  const [map, setMap] = useState<maplibregl.Map | null>(null);
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = new maplibregl.Map({
+    const instance = new maplibregl.Map({
       container: containerRef.current,
       style: "https://demotiles.maplibre.org/style.json",
       center: [-1.8, 53.5],
       zoom: 5.4,
     });
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    instance.addControl(new maplibregl.NavigationControl(), "top-right");
 
-    map.on("load", () => {
-      map.addSource("uk-route", {
+    instance.on("load", () => {
+      // Static GeoJSON: full route + waypoints
+      instance.addSource("uk-route", {
         type: "geojson",
         data: ukRoute as FeatureCollection,
       });
 
-      map.addLayer({
-        id: "route-line",
+      // Grey line = the full path (does not animate)
+      instance.addLayer({
+        id: "route-line-full",
         type: "line",
         source: "uk-route",
         filter: ["==", ["get", "kind"], "route"],
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
+        layout: { "line-join": "round", "line-cap": "round" },
         paint: {
-          "line-color": "#1d4ed8",
+          "line-color": "#94a3b8",
           "line-width": 4,
-          "line-opacity": 0.9,
+          "line-opacity": 0.7,
         },
       });
 
-      map.addLayer({
+      // Orange circles at each city
+      instance.addLayer({
         id: "route-waypoints",
         type: "circle",
         source: "uk-route",
@@ -57,7 +66,7 @@ export default function Map() {
         },
       });
 
-      map.addLayer({
+      instance.addLayer({
         id: "route-waypoint-labels",
         type: "symbol",
         source: "uk-route",
@@ -75,20 +84,26 @@ export default function Map() {
           "text-halo-width": 1.5,
         },
       });
+
+      // Map is ready — RouteSimulator can attach to it
+      setMap(instance);
     });
 
-    mapRef.current = map;
+    mapRef.current = instance;
 
     return () => {
-      map.remove();
+      setMap(null);
+      instance.remove();
       mapRef.current = null;
     };
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      style={{ width: "100%", height: "100%", minHeight: "100vh" }}
-    />
+    <div style={{ position: "relative", width: "100%", height: "100%", minHeight: "100vh" }}>
+      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+
+      {/* Simulator only mounts after the map is loaded */}
+      {map && <RouteSimulator map={map} />}
+    </div>
   );
 }
