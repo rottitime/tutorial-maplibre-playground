@@ -1,81 +1,36 @@
 /**
- * Tiny helpers for animating along a route.
+ * progress 0 → start, progress 1 → end
  *
- * Idea in one sentence:
- *   progress (0 → 1)  →  find a [lng, lat] on the line  →  also build the line "behind" us
+ * We treat the route as equal steps between waypoints
+ * (easy to understand; good enough for this demo).
+ *
+ * Example with 3 points A-B-C:
+ *   0    = A
+ *   0.5  = B
+ *   1    = C
+ *   0.25 = halfway A→B
  */
 
 export type LngLat = [number, number];
 
-/** Straight-line distance between two points (good enough for this demo). */
-function distance(a: LngLat, b: LngLat): number {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  return Math.sqrt(dx * dx + dy * dy);
-}
+export function alongRoute(coords: LngLat[], progress: number) {
+  const t = Math.max(0, Math.min(1, progress));
+  const last = coords.length - 1;
 
-/** Mix two points. t=0 → a, t=1 → b, t=0.5 → halfway. */
-function lerp(a: LngLat, b: LngLat, t: number): LngLat {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-}
+  // Which segment? e.g. 8 points → 7 segments
+  const exact = t * last;
+  const i = Math.min(Math.floor(exact), last - 1);
+  const frac = exact - i; // 0..1 within that segment
 
-/**
- * Given the full route and a progress value from 0 to 1,
- * return:
- *   - position: where the marker should be right now
- *   - travelled: every coordinate from the start up to that position
- *                (used to draw the coloured "already done" line)
- */
-export function getProgressAlongRoute(
-  coordinates: LngLat[],
-  progress: number,
-): { position: LngLat; travelled: LngLat[] } {
-  // Clamp so progress stays in [0, 1]
-  const p = Math.max(0, Math.min(1, progress));
+  const a = coords[i];
+  const b = coords[i + 1];
+  const position: LngLat = [
+    a[0] + (b[0] - a[0]) * frac,
+    a[1] + (b[1] - a[1]) * frac,
+  ];
 
-  // Edge cases: start / end of the trip
-  if (p === 0) {
-    return { position: coordinates[0], travelled: [coordinates[0]] };
-  }
-  if (p === 1) {
-    return {
-      position: coordinates[coordinates.length - 1],
-      travelled: [...coordinates],
-    };
-  }
+  // Line from start up to where we are now
+  const travelled = [...coords.slice(0, i + 1), position];
 
-  // 1) Measure each segment, and the whole route length
-  const segments: number[] = [];
-  let total = 0;
-  for (let i = 0; i < coordinates.length - 1; i++) {
-    const len = distance(coordinates[i], coordinates[i + 1]);
-    segments.push(len);
-    total += len;
-  }
-
-  // 2) How far along the route should we be?
-  let remaining = p * total;
-
-  // 3) Walk segment by segment until remaining fits in the current one
-  for (let i = 0; i < segments.length; i++) {
-    const segLen = segments[i];
-
-    if (remaining <= segLen) {
-      // We are part-way along segment i → i+1
-      const t = segLen === 0 ? 0 : remaining / segLen;
-      const position = lerp(coordinates[i], coordinates[i + 1], t);
-
-      // "Travelled" = every full waypoint so far + current position
-      const travelled = coordinates.slice(0, i + 1);
-      travelled.push(position);
-
-      return { position, travelled };
-    }
-
-    remaining -= segLen;
-  }
-
-  // Fallback (should not happen): last point
-  const last = coordinates[coordinates.length - 1];
-  return { position: last, travelled: [...coordinates] };
+  return { position, travelled };
 }

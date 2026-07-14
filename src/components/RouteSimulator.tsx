@@ -1,234 +1,180 @@
 "use client";
 
 /**
- * RouteSimulator.tsx — everything about the trip animation.
+ * RouteSimulator — animates a marker along the route.
  *
- * Receives a ready MapLibre map, then:
- *   1. Adds a blue "travelled" line + a red marker
- *   2. Animates progress from 0 → 1
- *   3. Each frame: move marker + grow the blue line behind it
- *   4. Shows Play / Pause / Reset controls
+ * Big picture:
+ *   1. Add a blue trail + red marker to the map
+ *   2. progress goes from 0 → 1 over a few seconds
+ *   3. Each frame: update marker position + blue line behind it
  */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { Feature, LineString, Point } from "geojson";
 import type maplibregl from "maplibre-gl";
 import ukRoute from "@/data/uk-route.json";
-import { getProgressAlongRoute, type LngLat } from "@/lib/routeMath";
+import { alongRoute, type LngLat } from "@/lib/routeMath";
 
-// How long one full trip takes (milliseconds)
-const TRIP_DURATION_MS = 12_000;
+const DURATION_MS = 12_000;
 
-type Props = {
-  map: maplibregl.Map;
-};
-
-/** Pull the LineString coordinates out of our GeoJSON. */
-function getRouteCoordinates(): LngLat[] {
-  const route = ukRoute.features.find(
-    (f) => f.properties?.kind === "route" && f.geometry.type === "LineString",
-  );
-  if (!route || route.geometry.type !== "LineString") {
-    throw new Error("Route LineString not found in uk-route.json");
+function getRouteCoords(): LngLat[] {
+  const feature = ukRoute.features.find((f) => f.properties?.kind === "route");
+  if (!feature || feature.geometry.type !== "LineString") {
+    throw new Error("Missing route LineString in uk-route.json");
   }
-  return route.geometry.coordinates as LngLat[];
+  return feature.geometry.coordinates as LngLat[];
 }
 
-/** Build a GeoJSON Point for the moving marker. */
-function pointFeature(position: LngLat): Feature<Point> {
-  return {
+const ROUTE = getRouteCoords();
+
+/** Push marker + trail GeoJSON onto the map for this progress. */
+function draw(map: maplibregl.Map, progress: number) {
+  const { position, travelled } = alongRoute(ROUTE, progress);
+
+  const marker = map.getSource("marker") as maplibregl.GeoJSONSource | undefined;
+  const trail = map.getSource("travelled") as maplibregl.GeoJSONSource | undefined;
+
+  marker?.setData({
     type: "Feature",
     properties: {},
     geometry: { type: "Point", coordinates: position },
-  };
+  });
+  trail?.setData({
+    type: "Feature",
+    properties: {},
+    geometry: { type: "LineString", coordinates: travelled },
+  });
 }
 
-/** Build a GeoJSON LineString for the coloured trail behind the marker. */
-function lineFeature(coordinates: LngLat[]): Feature<LineString> {
-  return {
-    type: "Feature",
-    properties: { kind: "travelled" },
-    geometry: {
-      type: "LineString",
-      // A LineString needs at least 2 points
-      coordinates:
-        coordinates.length >= 2
-          ? coordinates
-          : [coordinates[0], coordinates[0]],
-    },
-  };
-}
+type Props = { map: maplibregl.Map };
 
 export default function RouteSimulator({ map }: Props) {
-  const markerSourceRef = useRef<maplibregl.GeoJSONSource | null>(null);
-  const travelledSourceRef = useRef<maplibregl.GeoJSONSource | null>(null);
-
-  const animationRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number | null>(null);
-
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0); // 0 = London, 1 = Edinburgh
+  const [progress, setProgress] = useState(0);
+  // Latest progress for the animation (so Pause → Play can resume)
+  const progressRef = useRef(0);
 
-  // ----------------------------------------------------------
-  // 1) Add simulator layers onto the map (once)
-  // ----------------------------------------------------------
+  // --- 1) Add marker + trail layers once ---
   useEffect(() => {
-    const coordinates = getRouteCoordinates();
-    const start = coordinates[0];
+    const start = ROUTE[0];
 
-    // Blue line that grows as we travel
     map.addSource("travelled", {
       type: "geojson",
-      data: lineFeature([start]),
-    });
-
-    map.addLayer({
-      id: "route-line-travelled",
-      type: "line",
-      source: "travelled",
-      layout: { "line-join": "round", "line-cap": "round" },
-      paint: {
-        "line-color": "#1d4ed8",
-        "line-width": 5,
-        "line-opacity": 1,
+      data: {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: [start, start] },
       },
     });
-
-    // Red moving marker
-    map.addSource("marker", {
-      type: "geojson",
-      data: pointFeature(start),
+    map.addLayer({
+      id: "travelled-line",
+      type: "line",
+      source: "travelled",
+      paint: { "line-color": "#1d4ed8", "line-width": 5 },
     });
 
+    map.addSource("marker", {
+      type: "geojson",
+      data: {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "Point", coordinates: start },
+      },
+    });
     map.addLayer({
-      id: "moving-marker",
+      id: "marker-circle",
       type: "circle",
       source: "marker",
       paint: {
         "circle-radius": 11,
         "circle-color": "#dc2626",
         "circle-stroke-width": 3,
-        "circle-stroke-color": "#ffffff",
+        "circle-stroke-color": "#fff",
       },
     });
 
-    markerSourceRef.current = map.getSource("marker") as maplibregl.GeoJSONSource;
-    travelledSourceRef.current = map.getSource(
-      "travelled",
-    ) as maplibregl.GeoJSONSource;
-
-    // Clean up layers if this component unmounts
     return () => {
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-      }
-
-      if (map.getLayer("moving-marker")) map.removeLayer("moving-marker");
-      if (map.getLayer("route-line-travelled")) {
-        map.removeLayer("route-line-travelled");
-      }
-      if (map.getSource("marker")) map.removeSource("marker");
-      if (map.getSource("travelled")) map.removeSource("travelled");
-
-      markerSourceRef.current = null;
-      travelledSourceRef.current = null;
+      map.removeLayer("marker-circle");
+      map.removeLayer("travelled-line");
+      map.removeSource("marker");
+      map.removeSource("travelled");
     };
   }, [map]);
 
-  // ----------------------------------------------------------
-  // 2) Paint marker + trail for a given progress (0..1)
-  // ----------------------------------------------------------
-  function paintAtProgress(p: number) {
-    const coordinates = getRouteCoordinates();
-    const { position, travelled } = getProgressAlongRoute(coordinates, p);
+  // --- 2) When playing, animate progress 0 → 1 ---
+  useEffect(() => {
+    if (!playing) return;
 
-    markerSourceRef.current?.setData(pointFeature(position));
-    travelledSourceRef.current?.setData(lineFeature(travelled));
-    setProgress(p);
-  }
+    const startedAt = performance.now() - progressRef.current * DURATION_MS;
+    let frame = 0;
 
-  // ----------------------------------------------------------
-  // 3) Animation loop: each frame bump progress, then paint
-  // ----------------------------------------------------------
-  function tick(now: number) {
-    if (startTimeRef.current === null) {
-      startTimeRef.current = now;
-    }
+    const tick = (now: number) => {
+      const next = Math.min(1, (now - startedAt) / DURATION_MS);
+      draw(map, next);
+      progressRef.current = next;
+      setProgress(next);
 
-    const elapsed = now - startTimeRef.current;
-    const next = Math.min(1, elapsed / TRIP_DURATION_MS);
+      if (next < 1) {
+        frame = requestAnimationFrame(tick);
+      } else {
+        setPlaying(false);
+      }
+    };
 
-    paintAtProgress(next);
-
-    if (next < 1) {
-      animationRef.current = requestAnimationFrame(tick);
-    } else {
-      setPlaying(false);
-      animationRef.current = null;
-      startTimeRef.current = null;
-    }
-  }
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, map]);
 
   function play() {
-    if (playing || !markerSourceRef.current || !travelledSourceRef.current) return;
-
-    if (progress >= 1) {
-      paintAtProgress(0);
+    if (progressRef.current >= 1) {
+      draw(map, 0);
+      progressRef.current = 0;
+      setProgress(0);
     }
-
     setPlaying(true);
-    // Resume from current progress (so Pause → Play continues)
-    startTimeRef.current = performance.now() - progress * TRIP_DURATION_MS;
-    animationRef.current = requestAnimationFrame(tick);
-  }
-
-  function pause() {
-    if (animationRef.current !== null) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-    startTimeRef.current = null;
-    setPlaying(false);
   }
 
   function reset() {
-    pause();
-    paintAtProgress(0);
+    setPlaying(false);
+    draw(map, 0);
+    progressRef.current = 0;
+    setProgress(0);
   }
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: 16,
-        bottom: 24,
-        zIndex: 1,
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "12px 16px",
-        background: "rgba(255, 255, 255, 0.92)",
-        border: "1px solid #e2e8f0",
-        borderRadius: 8,
-        fontFamily: "system-ui, sans-serif",
-        fontSize: 14,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-      }}
-    >
-      <button type="button" onClick={playing ? pause : play} style={buttonStyle}>
+    <div style={panelStyle}>
+      <button
+        type="button"
+        onClick={playing ? () => setPlaying(false) : play}
+        style={btnStyle}
+      >
         {playing ? "Pause" : progress >= 1 ? "Replay" : "Play"}
       </button>
-      <button type="button" onClick={reset} style={buttonStyle}>
+      <button type="button" onClick={reset} style={btnStyle}>
         Reset
       </button>
-      <span style={{ color: "#334155", minWidth: 90 }}>
-        Progress: {Math.round(progress * 100)}%
-      </span>
+      <span>Progress: {Math.round(progress * 100)}%</span>
     </div>
   );
 }
 
-const buttonStyle: CSSProperties = {
+const panelStyle: CSSProperties = {
+  position: "absolute",
+  left: 16,
+  bottom: 24,
+  zIndex: 1,
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  padding: "12px 16px",
+  background: "rgba(255,255,255,0.92)",
+  border: "1px solid #e2e8f0",
+  borderRadius: 8,
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 14,
+  boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+};
+
+const btnStyle: CSSProperties = {
   padding: "8px 14px",
   border: "1px solid #cbd5e1",
   borderRadius: 6,
