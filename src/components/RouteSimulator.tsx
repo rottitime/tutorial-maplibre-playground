@@ -9,7 +9,7 @@
  *   3. Each frame: update marker position + blue line behind it
  */
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type maplibregl from 'maplibre-gl'
 import ukRoute from '@/data/uk-route.json'
 import { alongRoute, type LngLat } from '@/lib/routeMath'
